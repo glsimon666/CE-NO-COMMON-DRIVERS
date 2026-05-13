@@ -91,6 +91,7 @@ dtb-y += sc2_s905x4_sei_smb_280_id6.dtb
 dtb-y += sc2_s905x4_sei_smb_280_id7.dtb
 dtb-y += sc2_s905x4_ugoos_am7.dtb
 dtb-y += sc2_s905x4_ugoos_x4.dtb
+dtb-y += sc2_s905x4_tencent_4pro.dtb
 dtb-y += sc2_s905x4_x96_x4_2g.dtb
 dtb-y += sc2_s905x4_x96_x4_2g_1gbit.dtb
 dtb-y += sc2_s905x4_x96_x4_4g.dtb

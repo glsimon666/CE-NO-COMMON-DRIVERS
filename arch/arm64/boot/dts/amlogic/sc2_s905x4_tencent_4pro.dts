@@ -1,0 +1,10 @@
+#include "sc2_s905x4_ugoos_x4.dts"
+
+/ {
+	model = "Tencent Aurora 4Pro";
+	coreelec-dt-id = "sc2_s905x4_tencent_4pro";
+};
+
+&pcie {
+	status = "okay";
+};
