@@ -4720,7 +4720,7 @@ int amdv_policy_process(struct vframe_s *vf, int *mode,
 }
 
 /* dv provider of each video layer*/
-char dv_provider[2][32] = {"dvbldec", "dvbldec2"};
+char dv_provider[2][32] = {"dvbldec", "dveldec"};
 
 void amdv_set_provider(char *prov_name, enum vd_path_e vd_layer)
 {
