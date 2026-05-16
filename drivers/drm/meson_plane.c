@@ -997,11 +997,13 @@ static void meson_plane_destroy_state(struct drm_plane *plane,
 static void meson_plane_reset(struct drm_plane *plane)
 {
 	struct am_meson_plane_state *meson_plane_state;
-	int min_zpos = OSD_PLANE_BEGIN_ZORDER;
 	int zpos = 0;
 	struct am_osd_plane *osd_plane = to_am_osd_plane(plane);
 
-	zpos = osd_plane->plane_index + min_zpos;
+	if (plane->type == DRM_PLANE_TYPE_PRIMARY)
+		zpos = OSD_PLANE_END_ZORDER;
+	else
+		zpos = osd_plane->plane_index + OSD_PLANE_BEGIN_ZORDER;
 
 	if (plane->state) {
 		meson_plane_destroy_state(plane, plane->state);
@@ -2082,7 +2084,10 @@ static struct am_osd_plane *am_osd_plane_create(struct meson_drm *priv,
 		}
 	}
 
-	zpos = osd_plane->plane_index + min_zpos;
+	if (type == DRM_PLANE_TYPE_PRIMARY)
+		zpos = max_zpos;
+	else
+		zpos = osd_plane->plane_index + min_zpos;
 
 	plane = &osd_plane->base;
 	sprintf(plane_name, "osd%d", i);
