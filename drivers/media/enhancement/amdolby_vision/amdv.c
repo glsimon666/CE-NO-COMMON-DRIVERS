@@ -14886,8 +14886,8 @@ int register_dv_functions(const struct dolby_vision_func_s *func)
 	}
 	if (is_aml_s5()) {
 		malloc_md_pkt();
-		core2_sel = 3;
-		copy_core1a = 1;
+		core2_sel = 1;
+		copy_core1a = 0;
 	}
 	module_installed = true;
 	return ret;

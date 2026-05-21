@@ -10,6 +10,8 @@
 #define VPP_OSD2_IN_SIZE                           0x1df3
 
 #define T7_HDR2_IN_SIZE                           0x1a5c
+#define T7_CORE2C_DMA_CTRL                         0x6139
+#define T7_CORE2C_DMA_PORT                         0x613f
 #define S5_CORE2C_DMA_CTRL     0x0d39
 #define S5_CORE2C_DMA_PORT     0x0d3f
 

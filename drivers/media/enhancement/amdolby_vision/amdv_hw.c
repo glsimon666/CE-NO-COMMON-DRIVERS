@@ -3868,7 +3868,7 @@ u32 *get_core2_lut(void)
 {
 	struct dm_lut_ipcore *p_dm_lut2 = NULL;
 
-	if (is_aml_s5() && is_amdv_on()) {
+	if (is_amdv_on()) {
 		if (multi_dv_mode)
 			p_dm_lut2 = &new_m_dovi_setting.dm_lut2;
 		else

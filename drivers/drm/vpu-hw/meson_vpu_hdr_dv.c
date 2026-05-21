@@ -108,8 +108,13 @@ static void t7_hdr_set_state(struct meson_vpu_block *vblk,
 	struct meson_vpu_pipeline *pipeline = hdr->base.pipeline;
 	struct hdr_reg_s *reg = hdr->reg;
 	struct rdma_reg_ops *reg_ops = state->sub->reg_ops;
-	struct meson_vpu_pipeline_state *mvps;
+	struct meson_vpu_pipeline_state *mvps, *old_mvps;
 	u32 hsize, vsize;
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	u32 *p_core2_lut = NULL;
+	u32 lut_count = 256 * 5;
+	u32 i;
+#endif
 
 	mvps = priv_to_pipeline_state(pipeline->obj.state);
 
@@ -119,6 +124,31 @@ static void t7_hdr_set_state(struct meson_vpu_block *vblk,
 
 		MESON_DRM_BLOCK("%s set_state,input size:%u,%u.\n", hdr->base.name, hsize, vsize);
 		reg_ops->rdma_write_reg(reg->vpp_osd_in_size, hsize | (vsize << 16));
+
+		old_mvps = meson_vpu_pipeline_get_old_state(pipeline, old_state->obj.state);
+		if (old_mvps && mvps->plane_info[MESON_OSD3].enable &&
+		    !old_mvps->plane_info[MESON_OSD3].enable) {
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+			p_core2_lut = get_core2_lut();
+			MESON_DRM_BLOCK("p_core2_lut %px\n", p_core2_lut);
+
+			if (p_core2_lut && is_amdv_enable() && core2c_update_lut) {
+				/* bit3=1, disable latch (same as S5) */
+				reg_ops->rdma_write_reg(T7_CORE2C_DMA_CTRL, 0x1409);
+
+				for (i = 0; i < lut_count; i += 4) {
+					reg_ops->rdma_write_reg(T7_CORE2C_DMA_PORT,
+						p_core2_lut[i + 3]);
+					reg_ops->rdma_write_reg(T7_CORE2C_DMA_PORT,
+						p_core2_lut[i + 2]);
+					reg_ops->rdma_write_reg(T7_CORE2C_DMA_PORT,
+						p_core2_lut[i + 1]);
+					reg_ops->rdma_write_reg(T7_CORE2C_DMA_PORT,
+						p_core2_lut[i]);
+				}
+			}
+#endif
+		}
 	}
 	MESON_DRM_BLOCK("%s set_state called.\n", hdr->base.name);
 }
