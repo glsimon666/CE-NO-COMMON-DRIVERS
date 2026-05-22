@@ -20,6 +20,7 @@ include $(COMMON_DRIVERS_DIR)/drivers/media/esm/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/atv_demod/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/dtv_demod/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/avsync/Makefile
+include $(COMMON_DRIVERS_DIR)/drivers/media/avsync_v2/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/frc/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/di_v4l/Makefile
 include $(COMMON_DRIVERS_DIR)/drivers/media/di_mini/Makefile

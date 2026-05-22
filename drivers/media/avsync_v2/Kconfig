@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+#
+# Amlogic Unified AVSync v2
+#
+config AMLOGIC_MEDIA_AVSYNC_V2
+	bool "Unified AVSync v2"
+	default n
+	help
+		Single-driver AV sync engine replacing the fragmented
+		msync/tsync/video_sync/video_queue_sync approach.
+		Features 64-bit monotonic PTS, sub-frame timing adjustment,
+		HDMI ACR clock feedback, and adaptive sync strategy.
