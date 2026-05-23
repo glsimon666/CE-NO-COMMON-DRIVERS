@@ -3,8 +3,79 @@
 / {
 	model = "Tencent Aurora 4Pro";
 	coreelec-dt-id = "sc2_s905x4_tencent_4pro";
+
+	gpioleds {
+		/delete-node/ net_red;
+		/delete-node/ net_green;
+		/delete-node/ net_blue;
+
+		sys_led {
+			gpios = <&gpio GPIOH_7 GPIO_ACTIVE_LOW>;
+		};
+
+		net_led {
+			label = "net_led";
+			gpios = <&gpio GPIOD_4 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "0.0:06:link";
+		};
+
+		red_led {
+			label = "red_led";
+			gpios = <&gpio GPIOD_11 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "default-on";
+		};
+
+		rc_led {
+			label = "rc_led";
+			gpios = <&gpio GPIOE_2 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "rc-feedback";
+		};
+	};
+
+	auge_sound {
+		/delete-property/ avout_mute-gpios;
+		avout_mute-gpios = <&gpio GPIOH_5 GPIO_ACTIVE_HIGH>;
+
+		aml-audio-card,dai-link@1 {
+			/delete-property/ codec;
+		};
+	};
+
+	/delete-node/ gpio_keypad;
+
+	regulator-vbus_usb {
+		/delete-property/ gpio;
+	};
+};
+
+&ext_mdio {
+	external_phy: ethernet-phy@0 {
+		/delete-property/ max-speed;
+		/delete-property/ reset-assert-us;
+		/delete-property/ reset-deassert-us;
+		/delete-property/ reset-gpios;
+
+		max-speed = <100>;
+		eee-broken-1000t;
+	};
+};
+
+&ethmac {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-names;
+	/delete-property/ phy-handle;
+	/delete-property/ phy-mode;
+	/delete-property/ amlogic,tx-delay-ns;
+};
+
+&i2c3 {
+	/delete-node/ es8388@10;
 };
 
 &pcie {
 	status = "okay";
+};
+
+&sd_emmc_a {
+	status = "disabled";
 };
