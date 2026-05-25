@@ -455,7 +455,7 @@ static void derive_curve_params(struct cuva_hdr_dynamic_metadata_s *md,
 		*k1 = max(md->base_param_m_k1[w], 1);
 		*k2 = max(md->base_param_m_k2[w], 0);
 		if (md->base_param_m_k3[w] == 2)
-			*k3 = md->maximum_maxrgb_pq;
+			*k3 = md->max_maxrgb_pq;
 		else
 			*k3 = md->base_param_m_k3[w] > 0 ? md->base_param_m_k3[w] : 1;
 	} else {
