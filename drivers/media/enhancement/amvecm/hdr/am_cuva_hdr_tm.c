@@ -19,6 +19,7 @@
 #include <linux/amlogic/media/amvecm/cuva_alg.h>
 #include "am_cuva_hdr_tm.h"
 #include "am_hdr10_plus.h"
+#include "am_cuva_hdr_alg.h"
 
 uint cuva_sw_dbg;
 module_param(cuva_sw_dbg, uint, 0664);
@@ -224,7 +225,7 @@ struct aml_cuva_data_s cuva_data = {
 	.static_reg = &aml_static_reg,
 	.aml_vm_regs = &vm_reg,
 	.cuva_md = &cuva_metadata,
-	.cuva_hdr_alg = NULL
+	.cuva_hdr_alg = cuva_hdr_alg_func
 };
 
 struct aml_cuva_data_s *get_cuva_data(void)
