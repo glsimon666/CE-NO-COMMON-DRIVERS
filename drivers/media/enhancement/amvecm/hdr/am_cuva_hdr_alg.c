@@ -467,7 +467,8 @@ static void derive_curve_params(struct cuva_hdr_dynamic_metadata_s *md,
 			break;
 		case CUVA_HDR2HDR10:
 		case CUVA_HLG2HDR10:
-			*m_p = 14333; *m_m_raw = 24; *m_a = 4095;
+			*m_p = 14333; *m_m_raw = 24;
+			*m_a = max_panel_e * 4095 / 1024;
 			*m_b = 0; *m_n_raw = 10; *k1 = 1; *k2 = 1; *k3 = 1;
 			break;
 		default:
@@ -526,8 +527,17 @@ void cuva_hdr_alg_func(struct aml_cuva_data_s *aml_cuva_data)
 		}
 	} else {
 		alg_dbg("no metadata, using defaults\n");
-		gen_ogain_lut_default(aml_cuva_data->aml_vm_regs->ogain_lut,
-				      itp, aml_cuva_data->max_panel_e);
+		if (itp == CUVA_HDR2HDR10 || itp == CUVA_HLG2HDR10) {
+			derive_curve_params(md, aml_cuva_data->max_panel_e, itp,
+					    &m_p, &m_m_raw, &m_a, &m_b, &m_n_raw,
+					    &k1, &k2, &k3);
+			gen_ogain_from_curve(aml_cuva_data->aml_vm_regs->ogain_lut,
+					     m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3,
+					     aml_cuva_data->max_panel_e, itp);
+		} else {
+			gen_ogain_lut_default(aml_cuva_data->aml_vm_regs->ogain_lut,
+					      itp, aml_cuva_data->max_panel_e);
+		}
 		gen_cgain_lut_default(aml_cuva_data->aml_vm_regs->cgain_lut, itp);
 	}
 
