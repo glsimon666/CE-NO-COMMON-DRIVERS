@@ -38,6 +38,7 @@
 #define CGAIN_ONE 1024
 #define PQ_MAX 4095
 #define ONE_Q12 4095
+#define RND12 (ONE_Q12 / 2)
 
 static s64 pq_eotf_lut[PQ_MAX + 1];
 static int eotf_lut_ready;
@@ -108,9 +109,16 @@ static s64 iroot_q12(s64 x, int n)
 
 static s64 ipow_fract_q12(s64 x, int num, int den)
 {
+	s64 root, result;
+
 	if (num == den) return x;
 	if (num <= 0) return 0;
-	return iroot_q12((int)ipow_q12(x, num), den);
+	if (den <= 0) return 0;
+	if (x <= 0) return 0;
+
+	root = iroot_q12((int)x, den);
+	result = ipow_q12((int)root, num);
+	return result;
 }
 
 static int base_curve_func(int x, int m_p, int m_m_raw, int m_a,
@@ -133,9 +141,9 @@ static int cubic_spline(int x, int TH1, int MA, int MB, int MC, int MD)
 	s64 h = x - TH1;
 	s64 h2, h3;
 	if (h < 0) return MA;
-	h2 = h * h / ONE_Q12;
-	h3 = h2 * h / ONE_Q12;
-	return clamp_int((int)((MD * h3 + MC * h2 + MB * h + MA) / ONE_Q12), 0, ONE_Q12);
+	h2 = (h * h + RND12) / ONE_Q12;
+	h3 = (h2 * h + RND12) / ONE_Q12;
+	return clamp_int((int)((MD * h3 + MC * h2 + MB * h + MA + RND12) / ONE_Q12), 0, ONE_Q12);
 }
 
 static void init_default_spline(struct cuva_piecewise_s *sp,
@@ -167,7 +175,7 @@ static void init_default_spline(struct cuva_piecewise_s *sp,
 	sp->TH3_1 = clamp_int(sp->TH2_1 + C_q12 * sp->TH2_1 / ONE_Q12
 			      - D_q12 * sp->TH1_1 / ONE_Q12, 0, ONE_Q12);
 
-	VA1 = (sp->MB_0_0 * sp->TH1_1 / ONE_Q12) + sp->base_offset;
+	VA1 = (sp->MB_0_0 * sp->TH1_1 + RND12) / ONE_Q12 + sp->base_offset;
 	VA3 = base_curve_func(sp->TH3_1, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
 
 	if (VA3 > sp->TH3_1)
@@ -245,7 +253,7 @@ static int piecewise_fMAX_TM(int x, struct cuva_piecewise_s *sp,
 			     int m_n_raw, int k1, int k2, int k3)
 {
 	if (x < sp->TH3_0)
-		return clamp_int(sp->MB_0_0 * x / ONE_Q12 + sp->base_offset, 0, ONE_Q12);
+		return clamp_int((sp->MB_0_0 * x + RND12) / ONE_Q12 + sp->base_offset, 0, ONE_Q12);
 
 	if (x < sp->TH2_1)
 		return cubic_spline(x, sp->TH3_0, sp->MA_0_1, sp->MB_0_1,
