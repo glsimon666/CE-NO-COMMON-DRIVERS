@@ -7,19 +7,18 @@
  *
  * Based on UWA 005.1-2024 / SJ/T 11902.1-2023:
  *   Section 9.2: Base curve parameter derivation (Formulas 15-29)
+ *   Section 9.3: Spline parameter derivation (Formulas 30-93)
  *   Section 9.4: Color signal dynamic range conversion
- *     Formula (100/106): fTM(x)=m_a*(m_p*x^n/(K1*m_p-K2*x^n+K3))^(1/m_m)+m_b
+ *     Formula (97): Linear segment: fMAX_TM = MB[0][0]*fMAX + base_offset
+ *     Formula (98-99): Cubic spline segments 1-2 (group 1)
+ *     Formula (100): Base curve: fMAX_TM = H(fMAX)
+ *     Formula (101-102): Cubic spline segments 3-4 (group 2)
+ *     Formula (103-106): Bright-end extrapolation
  *     Formula (107): gain K = PQ_EOTF(fMAX_TM) / PQ_EOTF(fMAX)
  *   Section 9.5: Color saturation correction
  *
- * PQ_EOTF per UWA Formula (12):
- *   L = max((V^(1/m1)-c1)/(c2-c3*V^(1/m1)), 0)^(1/m2)
- *   m1 = 2610/16384, m2 = 2523/4096*128
- *   c1 = 3424/4096, c2 = 2413/4096*32, c3 = 2392/4096*32
- *
- * Gain computed per Formula (107) in linear domain via PQ_EOTF LUT.
- * Curve params scaled per UWA 7.4.9-7.4.13: m_m, m_n use /10 factor.
- * Fractional-power handled as x^(num/den)=iroot_q12(ipow_q12(x,num),den).
+ * PQ_EOTF per UWA Formula (12). Piecewise tone mapping per Formulas (97-106).
+ * All curve parameters in Q12 (0-4095 = 0.0-1.0).
  */
 
 #ifndef CONFIG_AMLOGIC_ZAPPER_CUT
@@ -33,13 +32,12 @@
 #include "am_hdr10_plus.h"
 #include "am_cuva_hdr_alg.h"
 
-#define CUVA_ALG_VER "cuva-hw-2025-06 uwa005.1 v3"
+#define CUVA_ALG_VER "cuva-hw-2025-06 uwa005.1 v4"
 
 #define GAIN_ONE 512
 #define CGAIN_ONE 1024
 #define PQ_MAX 4095
-
-#define Q24_ONE (1LL << 24)
+#define ONE_Q12 4095
 
 static s64 pq_eotf_lut[PQ_MAX + 1];
 static int eotf_lut_ready;
@@ -54,10 +52,237 @@ MODULE_PARM_DESC(cuva_alg_dbg, "\n cuva_alg_dbg\n");
 			pr_info("CUVA_ALG: " fmt, ##args); \
 	} while (0)
 
+struct cuva_piecewise_s {
+	int TH3_0, MB_0_0, base_offset;
+	int TH1_1, TH2_1, TH3_1;
+	int MA_0_1, MB_0_1, MC_0_1, MD_0_1;
+	int MA_1_1, MB_1_1, MC_1_1, MD_1_1;
+	int TH1_2, TH2_2, TH3_2;
+	int MA_0_2, MB_0_2, MC_0_2, MD_0_2;
+	int MA_1_2, MB_1_2, MC_1_2, MD_1_2;
+	int spline_th_mode;
+};
+
+static int clamp_int(int val, int min, int max)
+{
+	if (val < min) return min;
+	if (val > max) return max;
+	return val;
+}
+
+static s64 clamp_s64(s64 val, s64 min, s64 max)
+{
+	if (val < min) return min;
+	if (val > max) return max;
+	return val;
+}
+
+static s64 ipow_q12(s64 x, int n)
+{
+	s64 result = x;
+	int i;
+	if (n <= 0) return ONE_Q12;
+	if (x <= 0) return 0;
+	for (i = 1; i < n; i++)
+		result = result * x / ONE_Q12;
+	return clamp_s64(result, 0, ONE_Q12);
+}
+
+static s64 iroot_q12(s64 x, int n)
+{
+	int lo, hi, mid, i;
+	s64 mid_pow;
+	if (x <= 0 || n <= 0) return 0;
+	if (n == 1) return x;
+	lo = 0; hi = ONE_Q12;
+	while (lo < hi) {
+		mid = (lo + hi + 1) >> 1;
+		mid_pow = mid;
+		for (i = 1; i < n; i++)
+			mid_pow = mid_pow * mid / ONE_Q12;
+		if (mid_pow <= x) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo;
+}
+
+static s64 ipow_fract_q12(s64 x, int num, int den)
+{
+	if (num == den) return x;
+	if (num <= 0) return 0;
+	return iroot_q12((int)ipow_q12(x, num), den);
+}
+
+static int base_curve_func(int x, int m_p, int m_m_raw, int m_a,
+			   int m_b, int m_n_raw, int k1, int k2, int k3)
+{
+	s64 xn, denom, inner;
+	int root;
+	if (x <= 0) return m_b;
+	xn = (m_n_raw != 10) ? ipow_fract_q12(x, m_n_raw, 10) : x;
+	denom = (s64)k1 * m_p - (s64)k2 * xn + (s64)k3 * ONE_Q12;
+	if (denom <= 0) denom = 1;
+	inner = m_p * xn / denom;
+	inner = clamp_s64(inner, 0, ONE_Q12);
+	root = (int)ipow_fract_q12((int)inner, 10, m_m_raw);
+	return clamp_int((int)((s64)m_a * root / ONE_Q12) + m_b, 0, ONE_Q12);
+}
+
+static int cubic_spline(int x, int TH1, int MA, int MB, int MC, int MD)
+{
+	s64 h = x - TH1;
+	s64 h2, h3;
+	if (h < 0) return MA;
+	h2 = h * h / ONE_Q12;
+	h3 = h2 * h / ONE_Q12;
+	return clamp_int((int)((MD * h3 + MC * h2 + MB * h + MA) / ONE_Q12), 0, ONE_Q12);
+}
+
+static void init_default_spline(struct cuva_piecewise_s *sp,
+				int m_p, int m_m_raw, int m_a, int m_b,
+				int m_n_raw, int k1, int k2, int k3)
+{
+	int TH3_0_q12;
+	int B_q12, C_q12, D_q12;
+	int MB00_q12;
+	int VA1, VA2, VA3;
+	int h1, h2;
+	s64 num, den;
+
+	TH3_0_q12 = (int)((s64)25 * ONE_Q12 / 100);
+
+	MB00_q12 = (int)((s64)96 * ONE_Q12 / 100);
+
+	sp->TH3_0 = TH3_0_q12;
+	sp->MB_0_0 = MB00_q12;
+	sp->base_offset = 0;
+
+	sp->TH1_1 = TH3_0_q12;
+
+	B_q12 = (int)((s64)15 * ONE_Q12 / 100);
+	sp->TH2_1 = clamp_int(sp->TH1_1 + B_q12, 0, ONE_Q12);
+
+	C_q12 = (int)((s64)50 * ONE_Q12 / 100);
+	D_q12 = (int)((s64)50 * ONE_Q12 / 100);
+	sp->TH3_1 = clamp_int(sp->TH2_1 + C_q12 * sp->TH2_1 / ONE_Q12
+			      - D_q12 * sp->TH1_1 / ONE_Q12, 0, ONE_Q12);
+
+	VA1 = (sp->MB_0_0 * sp->TH1_1 / ONE_Q12) + sp->base_offset;
+	VA3 = base_curve_func(sp->TH3_1, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
+
+	if (VA3 > sp->TH3_1)
+		VA3 = sp->TH3_1;
+
+	num = ((s64)sp->TH2_1 - sp->TH1_1) * (VA3 - VA1);
+	den = sp->TH3_1 - sp->TH1_1;
+	VA2 = VA1 + (den > 0 ? (int)(num / den) : 0);
+
+	if (VA2 > sp->TH2_1)
+		VA2 = sp->TH2_1;
+
+	sp->MA_0_1 = VA1;
+	sp->MA_1_1 = VA2;
+
+	h1 = sp->TH2_1 - sp->TH1_1;
+	h2 = sp->TH3_1 - sp->TH2_1;
+
+	sp->MB_0_1 = sp->MB_0_0;
+
+	{
+		s64 gd1 = sp->MB_0_0;
+		s64 gd3 = 0;
+
+		gd3 = (s64)m_a * m_m_raw * m_p * k3 * ipow_fract_q12(sp->TH3_1, m_n_raw, 10);
+		if (gd3 > ONE_Q12) gd3 = ONE_Q12;
+
+		{
+			s64 h1_64 = h1, h2_64 = h2;
+			s64 v1 = VA1, v2 = VA2, v3 = VA3;
+			s64 mb1, mc0, md0, mc1, md1;
+
+			mb1 = (-3 * (v1 * h2_64 * h2_64 + v2 * h1_64 * h1_64 - v3 * h1_64 * h1_64
+				    - h2_64 * h2_64 * v2)
+			       - h1_64 * h2_64 * (h1_64 * gd3 + gd1 * h2_64))
+				/ max(2 * h1_64 * h2_64 * (h1_64 + h2_64), 1LL);
+
+			sp->MB_1_1 = clamp_int((int)(mb1 / ONE_Q12), 0, ONE_Q12);
+
+			num = 3 * v2 - 2 * gd1 * h1_64 / ONE_Q12 - 3 * v1 - (s64)sp->MB_1_1 * h1_64;
+			mc0 = num * ONE_Q12 / max(h1_64 * h1_64, 1LL);
+			sp->MC_0_1 = clamp_int((int)(mc0 / ONE_Q12), 0, ONE_Q12);
+
+			num = (gd1 * h1_64 / ONE_Q12 + (s64)sp->MB_1_1 * h1_64 / ONE_Q12
+			       + 2 * v1 - 2 * v2);
+			md0 = num * ONE_Q12 * ONE_Q12 / max(h1_64 * h1_64 * h1_64, 1LL);
+			sp->MD_0_1 = clamp_int((int)(md0 / ONE_Q12), 0, ONE_Q12);
+
+			sp->MC_1_1 = clamp_int(sp->MC_0_1 + 3 * sp->MD_0_1 * h1 / ONE_Q12, 0, ONE_Q12);
+
+			num = v3 - v2 - h2_64 * gd3 / ONE_Q12
+				+ (s64)sp->MC_0_1 * h2_64 * h2_64 / ONE_Q12 / ONE_Q12
+				+ 3 * sp->MD_0_1 * h1_64 * h2_64 * h2_64 / ONE_Q12 / ONE_Q12 / ONE_Q12;
+			md1 = -num * ONE_Q12 * ONE_Q12 * ONE_Q12 / max(2 * h2_64 * h2_64 * h2_64, 1LL);
+			sp->MD_1_1 = clamp_int((int)(md1 / ONE_Q12), 0, ONE_Q12);
+		}
+	}
+
+	sp->TH1_2 = ONE_Q12;
+	sp->TH2_2 = ONE_Q12;
+	sp->TH3_2 = ONE_Q12;
+	sp->MA_0_2 = ONE_Q12;
+	sp->MB_0_2 = 0;
+	sp->MC_0_2 = 0;
+	sp->MD_0_2 = 0;
+	sp->MA_1_2 = ONE_Q12;
+	sp->MB_1_2 = 0;
+	sp->MC_1_2 = 0;
+	sp->MD_1_2 = 0;
+	sp->spline_th_mode = 0;
+}
+
+static int piecewise_fMAX_TM(int x, struct cuva_piecewise_s *sp,
+			     int m_p, int m_m_raw, int m_a, int m_b,
+			     int m_n_raw, int k1, int k2, int k3)
+{
+	if (x < sp->TH3_0)
+		return clamp_int(sp->MB_0_0 * x / ONE_Q12 + sp->base_offset, 0, ONE_Q12);
+
+	if (x < sp->TH2_1)
+		return cubic_spline(x, sp->TH3_0, sp->MA_0_1, sp->MB_0_1,
+				    sp->MC_0_1, sp->MD_0_1);
+
+	if (x < sp->TH3_1)
+		return cubic_spline(x, sp->TH2_1, sp->MA_1_1, sp->MB_1_1,
+				    sp->MC_1_1, sp->MD_1_1);
+
+	if (x <= sp->TH1_2)
+		return base_curve_func(x, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
+
+	if (x < sp->TH2_2)
+		return cubic_spline(x, sp->TH1_2, sp->MA_0_2, sp->MB_0_2,
+				    sp->MC_0_2, sp->MD_0_2);
+
+	if (x < sp->TH3_2)
+		return cubic_spline(x, sp->TH2_2, sp->MA_1_2, sp->MB_1_2,
+				    sp->MC_1_2, sp->MD_1_2);
+
+	if (sp->spline_th_mode == 1 || sp->spline_th_mode == 2) {
+		s64 h = (s64)x - sp->TH3_2;
+		s64 h1 = (s64)sp->TH3_2 - sp->TH2_2;
+		s64 mbh, baseh;
+
+		mbh = 3 * sp->MD_1_2 * h1 * h1 + 2 * sp->MC_1_2 * h1 + sp->MB_1_2;
+		baseh = sp->MD_1_2 * h1 * h1 * h1 + sp->MC_1_2 * h1 * h1
+			+ sp->MB_1_2 * h1 + sp->MA_1_2;
+		return clamp_int((int)((mbh * h / ONE_Q12 + baseh) / ONE_Q12), 0, ONE_Q12);
+	}
+
+	return base_curve_func(x, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
+}
+
 static void build_pq_eotf_lut(void)
 {
 	int v;
-
 	static const u32 anchors_code[117] = {
 		0, 3900, 3908, 3916, 3924, 3932, 3940, 3948,
 		3956, 3964, 3972, 3976, 3977, 3978, 3979, 3980,
@@ -72,7 +297,6 @@ static void build_pq_eotf_lut(void)
 		4078, 4080, 4082, 4084, 4086, 4088, 4090, 4092,
 		4094, 4095
 	};
-
 	static const s64 anchors_q24[117] = {
 		0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 14929875,
@@ -91,21 +315,16 @@ static void build_pq_eotf_lut(void)
 	for (v = 0; v <= PQ_MAX; v++) {
 		int lo = 0, hi = 116, mid;
 		s64 lval;
-
 		if (anchors_code[0] >= v) {
-			pq_eotf_lut[v] = 0;
-			continue;
+			pq_eotf_lut[v] = 0; continue;
 		}
 		if (anchors_code[116] <= v) {
-			pq_eotf_lut[v] = anchors_q24[116];
-			continue;
+			pq_eotf_lut[v] = anchors_q24[116]; continue;
 		}
 		while (lo < hi - 1) {
 			mid = (lo + hi) / 2;
-			if (anchors_code[mid] <= v)
-				lo = mid;
-			else
-				hi = mid;
+			if (anchors_code[mid] <= v) lo = mid;
+			else hi = mid;
 		}
 		if (v == anchors_code[lo])
 			lval = anchors_q24[lo];
@@ -113,111 +332,13 @@ static void build_pq_eotf_lut(void)
 			s64 range_v = anchors_code[lo + 1] - anchors_code[lo];
 			s64 range_l = anchors_q24[lo + 1] - anchors_q24[lo];
 			if (range_v > 0)
-				lval = anchors_q24[lo] +
-					range_l * (v - anchors_code[lo]) / range_v;
+				lval = anchors_q24[lo] + range_l * (v - anchors_code[lo]) / range_v;
 			else
 				lval = anchors_q24[lo];
 		}
 		pq_eotf_lut[v] = lval;
 	}
 	eotf_lut_ready = 1;
-	alg_dbg("PQ_EOTF built: [3900]=%lld [3980]=%lld [4095]=%lld\n",
-		pq_eotf_lut[3900], pq_eotf_lut[3980], pq_eotf_lut[4095]);
-}
-
-static int clamp_int(int val, int min, int max)
-{
-	if (val < min)
-		return min;
-	if (val > max)
-		return max;
-	return val;
-}
-
-static s64 clamp_s64(s64 val, s64 min, s64 max)
-{
-	if (val < min)
-		return min;
-	if (val > max)
-		return max;
-	return val;
-}
-
-static s64 ipow_q12(s64 x, int n)
-{
-	s64 result = x;
-	int i;
-
-	if (n <= 0)
-		return 4095;
-	if (x <= 0)
-		return 0;
-	for (i = 1; i < n; i++)
-		result = result * x / 4095;
-	return clamp_s64(result, 0, 4095);
-}
-
-static s64 iroot_q12(s64 x, int n)
-{
-	int lo, hi, mid, i;
-	s64 mid_pow;
-
-	if (x <= 0 || n <= 0)
-		return 0;
-	if (n == 1)
-		return x;
-	lo = 0;
-	hi = 4095;
-	while (lo < hi) {
-		mid = (lo + hi + 1) >> 1;
-		mid_pow = mid;
-		for (i = 1; i < n; i++)
-			mid_pow = mid_pow * mid / 4095;
-		if (mid_pow <= x)
-			lo = mid;
-		else
-			hi = mid - 1;
-	}
-	return lo;
-}
-
-static s64 ipow_fract_q12(s64 x, int num, int den)
-{
-	s64 ip, ir;
-
-	if (num == den)
-		return x;
-	if (num <= 0)
-		return 0;
-	ip = ipow_q12(x, num);
-	ir = iroot_q12((int)ip, den);
-	return ir;
-}
-
-static int cuva_base_curve(int x, int m_p, int m_m_raw, int m_a,
-			   int m_b, int m_n_raw, int k1, int k2, int k3)
-{
-	s64 xn, denom, inner;
-	int root;
-
-	if (x <= 0)
-		return m_b;
-
-	if (m_n_raw != 10)
-		xn = ipow_fract_q12(x, m_n_raw, 10);
-	else
-		xn = x;
-
-	denom = (s64)k1 * m_p - (s64)k2 * xn + (s64)k3 * 4095;
-	if (denom <= 0)
-		denom = 1;
-
-	inner = m_p * xn / denom;
-	inner = clamp_s64(inner, 0, 4095);
-
-	root = (int)ipow_fract_q12((int)inner, 10, m_m_raw);
-
-	return clamp_int((int)((s64)m_a * root / 4095) + m_b, 0, 4095);
 }
 
 static void gen_ogain_from_curve(s64 *ogain, int m_p, int m_m_raw, int m_a,
@@ -225,9 +346,12 @@ static void gen_ogain_from_curve(s64 *ogain, int m_p, int m_m_raw, int m_a,
 				 int max_panel_e, int itp)
 {
 	int i;
+	struct cuva_piecewise_s sp;
 
 	if (!eotf_lut_ready)
 		build_pq_eotf_lut();
+
+	init_default_spline(&sp, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
 
 	for (i = 0; i < HDR2_OOTF_LUT_SIZE; i++) {
 		int x, y;
@@ -239,7 +363,7 @@ static void gen_ogain_from_curve(s64 *ogain, int m_p, int m_m_raw, int m_a,
 		}
 
 		x = i * PQ_MAX / (HDR2_OOTF_LUT_SIZE - 1);
-		y = cuva_base_curve(x, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
+		y = piecewise_fMAX_TM(x, &sp, m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
 
 		x = clamp_int(x, 0, PQ_MAX);
 		y = clamp_int(y, 0, PQ_MAX);
@@ -259,22 +383,16 @@ static void gen_ogain_from_curve(s64 *ogain, int m_p, int m_m_raw, int m_a,
 static void gen_ogain_lut_default(s64 *ogain, int itp, int max_panel_e)
 {
 	int i;
-
 	switch (itp) {
 	case CUVA_HDR2SDR:
 	case CUVA_HLG2SDR:
 		for (i = 0; i < HDR2_OOTF_LUT_SIZE; i++) {
-			if (i < 20)
-				ogain[i] = 800;
-			else if (i < 80)
-				ogain[i] = 800 - (i - 20) * 6;
-			else if (i < 140)
-				ogain[i] = 440 - (i - 80) * 8;
-			else
-				ogain[i] = 32;
+			if (i < 20) ogain[i] = 800;
+			else if (i < 80) ogain[i] = 800 - (i - 20) * 6;
+			else if (i < 140) ogain[i] = 440 - (i - 80) * 8;
+			else ogain[i] = 32;
 		}
 		break;
-
 	case CUVA_HDR2HDR10:
 	case CUVA_HLG2HDR10:
 		if (max_panel_e > 0 && max_panel_e < 1024) {
@@ -286,7 +404,6 @@ static void gen_ogain_lut_default(s64 *ogain, int itp, int max_panel_e)
 				ogain[i] = GAIN_ONE;
 		}
 		break;
-
 	case CUVA_HLG2HLG:
 	default:
 		for (i = 0; i < HDR2_OOTF_LUT_SIZE; i++)
@@ -298,15 +415,12 @@ static void gen_ogain_lut_default(s64 *ogain, int itp, int max_panel_e)
 static void gen_cgain_lut_default(s64 *cgain, int itp)
 {
 	int i;
-
 	switch (itp) {
 	case CUVA_HDR2SDR:
 	case CUVA_HLG2SDR:
 		for (i = 0; i < HDR2_CGAIN_LUT_SIZE; i++) {
-			if (i < 40)
-				cgain[i] = CGAIN_ONE;
-			else
-				cgain[i] = CGAIN_ONE - (i - 40) * 12;
+			if (i < 40) cgain[i] = CGAIN_ONE;
+			else cgain[i] = CGAIN_ONE - (i - 40) * 12;
 		}
 		break;
 	default:
@@ -340,35 +454,17 @@ static void derive_curve_params(struct cuva_hdr_dynamic_metadata_s *md,
 		switch (itp) {
 		case CUVA_HDR2SDR:
 		case CUVA_HLG2SDR:
-			*m_p = 14333;
-			*m_m_raw = 24;
-			*m_a = 4095;
-			*m_b = 0;
-			*m_n_raw = 10;
-			*k1 = 1;
-			*k2 = 1;
-			*k3 = 1;
+			*m_p = 14333; *m_m_raw = 24; *m_a = 4095;
+			*m_b = 0; *m_n_raw = 10; *k1 = 1; *k2 = 1; *k3 = 1;
 			break;
 		case CUVA_HDR2HDR10:
 		case CUVA_HLG2HDR10:
-			*m_p = 14333;
-			*m_m_raw = 24;
-			*m_a = 4095;
-			*m_b = 0;
-			*m_n_raw = 10;
-			*k1 = 1;
-			*k2 = 1;
-			*k3 = 1;
+			*m_p = 14333; *m_m_raw = 24; *m_a = 4095;
+			*m_b = 0; *m_n_raw = 10; *k1 = 1; *k2 = 1; *k3 = 1;
 			break;
 		default:
-			*m_p = 14333;
-			*m_m_raw = 24;
-			*m_a = 4095;
-			*m_b = 0;
-			*m_n_raw = 10;
-			*k1 = 1;
-			*k2 = 1;
-			*k3 = 1;
+			*m_p = 14333; *m_m_raw = 24; *m_a = 4095;
+			*m_b = 0; *m_n_raw = 10; *k1 = 1; *k2 = 1; *k3 = 1;
 			break;
 		}
 	}
@@ -402,9 +498,6 @@ void cuva_hdr_alg_func(struct aml_cuva_data_s *aml_cuva_data)
 				    &m_p, &m_m_raw, &m_a, &m_b, &m_n_raw,
 				    &k1, &k2, &k3);
 
-		alg_dbg("params m_p=%d m_m_raw=%d m_a=%d m_b=%d m_n_raw=%d k1=%d k2=%d k3=%d\n",
-			m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3);
-
 		gen_ogain_from_curve(aml_cuva_data->aml_vm_regs->ogain_lut,
 				     m_p, m_m_raw, m_a, m_b, m_n_raw, k1, k2, k3,
 				     aml_cuva_data->max_panel_e, itp);
@@ -412,7 +505,6 @@ void cuva_hdr_alg_func(struct aml_cuva_data_s *aml_cuva_data)
 		if (md->color_sat_mapping_flag && md->color_sat_num > 0) {
 			int i;
 			int num = clamp_int(md->color_sat_num, 1, 8);
-
 			for (i = 0; i < HDR2_CGAIN_LUT_SIZE; i++) {
 				int idx = i * (num - 1) / (HDR2_CGAIN_LUT_SIZE - 1);
 				idx = clamp_int(idx, 0, num - 1);
@@ -426,7 +518,6 @@ void cuva_hdr_alg_func(struct aml_cuva_data_s *aml_cuva_data)
 		}
 	} else {
 		alg_dbg("no metadata, using defaults\n");
-
 		gen_ogain_lut_default(aml_cuva_data->aml_vm_regs->ogain_lut,
 				      itp, aml_cuva_data->max_panel_e);
 		gen_cgain_lut_default(aml_cuva_data->aml_vm_regs->cgain_lut, itp);
@@ -437,10 +528,6 @@ void cuva_hdr_alg_func(struct aml_cuva_data_s *aml_cuva_data)
 			aml_cuva_data->aml_vm_regs->ogain_lut[0],
 			aml_cuva_data->aml_vm_regs->ogain_lut[74],
 			aml_cuva_data->aml_vm_regs->ogain_lut[148]);
-		pr_info("cgain[0]=%lld [32]=%lld [64]=%lld\n",
-			aml_cuva_data->aml_vm_regs->cgain_lut[0],
-			aml_cuva_data->aml_vm_regs->cgain_lut[32],
-			aml_cuva_data->aml_vm_regs->cgain_lut[64]);
 	}
 }
 EXPORT_SYMBOL(cuva_hdr_alg_func);
@@ -448,12 +535,10 @@ EXPORT_SYMBOL(cuva_hdr_alg_func);
 int cuva_hdr_alg_register(void)
 {
 	struct aml_cuva_data_s *cd = get_cuva_data();
-
 	if (!cd) {
 		pr_err("cuva_hdr_alg: cannot get cuva_data\n");
 		return -ENODEV;
 	}
-
 	cd->cuva_hdr_alg = cuva_hdr_alg_func;
 	pr_info("cuva_hdr_alg: installed (%s)\n", CUVA_ALG_VER);
 	return 0;
@@ -463,9 +548,7 @@ EXPORT_SYMBOL(cuva_hdr_alg_register);
 void cuva_hdr_alg_unregister(void)
 {
 	struct aml_cuva_data_s *cd = get_cuva_data();
-
-	if (cd)
-		cd->cuva_hdr_alg = NULL;
+	if (cd) cd->cuva_hdr_alg = NULL;
 	pr_info("cuva_hdr_alg: unregistered\n");
 }
 EXPORT_SYMBOL(cuva_hdr_alg_unregister);
