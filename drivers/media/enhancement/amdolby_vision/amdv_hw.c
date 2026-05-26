@@ -1068,6 +1068,11 @@ static int dv_core1_set(u32 dm_count,
 					(VPP_VD3_DSC_CTRL,
 					 /* vd3 to core1c */
 					 0, 4, 1);
+		} else if (is_aml_s5()) {
+			VSYNC_WR_DV_REG_BITS
+				(VD2_DV_BYPASS_CTRL,
+				 /* vd2 to dv core */
+				 1, 0, 1);
 		} else {
 			VSYNC_WR_DV_REG_BITS
 				(VIU_MISC_CTRL1,
@@ -1381,10 +1386,15 @@ static int dv_core1_set(u32 dm_count,
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
 					 0, 2, 2);
-				/*core1a el in sel null*/
+				/*core1a el in sel: vd2 if FEL, else null*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
-					 3, 4, 2);
+					 el_enable ? 1 : 3, 4, 2);
+				if (el_enable)
+					VSYNC_WR_DV_REG_BITS
+						(VPP_VD2_DSC_CTRL,
+						/* enable vd2 path to core1a EL */
+						0, 4, 1);
 				/*core1a out to vd1*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
@@ -1969,10 +1979,15 @@ static int dv_core1a_set(u32 dm_count,
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
 					 0, 2, 2);
-				/*core1a el in sel null*/
+				/*core1a el in sel: vd2 if FEL, else null*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
-					 3, 4, 2);
+					 el_enable ? 1 : 3, 4, 2);
+				if (el_enable)
+					VSYNC_WR_DV_REG_BITS
+						(VPP_VD2_DSC_CTRL,
+						/* enable vd2 path to core1a EL */
+						0, 4, 1);
 				/*core1a out to vd1*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
@@ -2054,14 +2069,14 @@ static int dv_core1a_set(u32 dm_count,
 				VSYNC_WR_DV_REG_BITS
 					(VD1_S0_DV_BYPASS_CTRL,
 					 1, 0, 1); /* enable core1a */
-				if (copy_core1a_to_core1b) {
+				if (copy_core1a_to_core1b || composer_enable) {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
-						 1, 0, 1); /* enable core1b */
+						 1, 0, 1); /* enable core1b / EL path */
 				} else {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
-						 0, 0, 1); /* disable core1b */
+						 0, 0, 1); /* disable */
 				}
 			} else {
 				VSYNC_WR_DV_REG_BITS
