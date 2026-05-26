@@ -4720,7 +4720,7 @@ int amdv_policy_process(struct vframe_s *vf, int *mode,
 }
 
 /* dv provider of each video layer*/
-char dv_provider[2][32] = {"dvbldec", "dvbldec2"};
+char dv_provider[2][32] = {"dvbldec", "dveldec"};
 
 void amdv_set_provider(char *prov_name, enum vd_path_e vd_layer)
 {
@@ -4801,7 +4801,8 @@ int is_amdv_frame(struct vframe_s *vf)
 		return 0;
 	} else if (vf->source_type == VFRAME_SOURCE_TYPE_OTHERS) {
 		if (!strcmp(dv_provider[layer_id], "dvbldec") ||
-			!strcmp(dv_provider[layer_id], "dvbldec2"))
+			!strcmp(dv_provider[layer_id], "dvbldec2") ||
+			!strcmp(dv_provider[layer_id], "dveldec"))
 			vf_notify_provider_by_name(dv_provider[layer_id],
 					   VFRAME_EVENT_RECEIVER_GET_AUX_DATA,
 					   (void *)&req);
@@ -4865,7 +4866,8 @@ bool is_dovi_dual_layer_frame(struct vframe_s *vf)
 
 	if (vf->source_type == VFRAME_SOURCE_TYPE_OTHERS) {
 		if (!strcmp(dv_provider[layer_id], "dvbldec") ||
-			!strcmp(dv_provider[layer_id], "dvbldec2"))
+			!strcmp(dv_provider[layer_id], "dvbldec2") ||
+			!strcmp(dv_provider[layer_id], "dveldec"))
 			vf_notify_provider_by_name(dv_provider[layer_id],
 			VFRAME_EVENT_RECEIVER_GET_AUX_DATA,
 			(void *)&req);
@@ -9540,7 +9542,8 @@ int amdv_parse_metadata_v2_stb(struct vframe_s *vf,
 
 			if (ret_flags && req.dv_enhance_exist) {
 				if (!strcmp(dv_provider[vd_path], "dvbldec") ||
-					!strcmp(dv_provider[vd_path], "dvbldec2"))
+					!strcmp(dv_provider[vd_path], "dvbldec2") ||
+					!strcmp(dv_provider[vd_path], "dveldec"))
 					vf_notify_provider_by_name
 						(dv_provider[vd_path],
 						 VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL,
@@ -9660,7 +9663,8 @@ int amdv_parse_metadata_v2_stb(struct vframe_s *vf,
 					el_req.aux_buf = NULL;
 					el_req.aux_size = 0;
 					if (!strcmp(dv_provider[vd_path], "dvbldec") ||
-						!strcmp(dv_provider[vd_path], "dvbldec2"))
+						!strcmp(dv_provider[vd_path], "dvbldec2") ||
+						!strcmp(dv_provider[vd_path], "dveldec"))
 						vf_notify_provider_by_name
 						(dv_provider[vd_path],
 						 VFRAME_EVENT_RECEIVER_GET_AUX_DATA,
