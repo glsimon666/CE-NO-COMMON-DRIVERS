@@ -4841,8 +4841,10 @@ bool is_dovi_dual_layer_frame(struct vframe_s *vf)
 	if (!vf)
 		return false;
 
-	if (!enable_fel)
+	if (!enable_fel) {
+		pr_info("[FEL_DBG] dual_layer check blocked: enable_fel=%d\n", enable_fel);
 		return false;
+	}
 
 	dv_id = vf->src_fmt.dv_id;
 	if (!dv_inst_valid(dv_id))
@@ -4867,10 +4869,13 @@ bool is_dovi_dual_layer_frame(struct vframe_s *vf)
 	if (vf->source_type == VFRAME_SOURCE_TYPE_OTHERS) {
 		if (!strcmp(dv_provider[layer_id], "dvbldec") ||
 			!strcmp(dv_provider[layer_id], "dvbldec2") ||
-			!strcmp(dv_provider[layer_id], "dveldec"))
+			!strcmp(dv_provider[layer_id], "dveldec")) {
 			vf_notify_provider_by_name(dv_provider[layer_id],
 			VFRAME_EVENT_RECEIVER_GET_AUX_DATA,
 			(void *)&req);
+			pr_info("[FEL_DBG] dual_layer query: provider=%s layer=%d enh_exist=%d\n",
+				dv_provider[layer_id], layer_id, req.dv_enhance_exist);
+		}
 		if (req.dv_enhance_exist)
 			return true;
 	}
@@ -8087,6 +8092,9 @@ int amdv_parse_metadata_v1(struct vframe_s *vf,
 				}
 				amdvdolby_vision_vf_add(vf, el_vf);
 				el_flag = 1;
+				pr_info("[FEL_DBG] EL frame paired: bl=%p el=%p bl_w=%dx%d el_w=%dx%d\n",
+					vf, el_vf, vf->width, vf->height,
+					el_vf->width, el_vf->height);
 				if (vf->width == el_vf->width)
 					el_halfsize_flag = 0;
 			} else {
@@ -8132,12 +8140,17 @@ int amdv_parse_metadata_v1(struct vframe_s *vf,
 		if (el_flag && !mel_flag &&
 		    ((dolby_vision_flags & FLAG_CERTIFICATION) == 0) &&
 		    !enable_fel) {
+			pr_info("[FEL_DBG] FEL blocked: enable_fel=%d mel_flag=%d\n",
+				enable_fel, mel_flag);
 			el_flag = 0;
 			amdv_el_disable = 1;
 		}
-		if (el_flag && !enable_mel)
+		if (el_flag && !enable_mel) {
+			pr_info("[FEL_DBG] MEL blocked: enable_mel=%d\n", enable_mel);
 			el_flag = 0;
+		}
 		if (src_format != FORMAT_DOVI) {
+			pr_info("[FEL_DBG] EL disabled: src_format=%d not DOVI\n", src_format);
 			el_flag = 0;
 			mel_flag = 0;
 		}
@@ -10838,6 +10851,8 @@ int amdv_control_path(struct vframe_s *vf, struct vframe_s *vf_2,
 			new_m_dovi_setting.input[i].input_mode = input_mode;
 			new_m_dovi_setting.input[i].el_flag = dv_inst[id].el_flag;
 			new_m_dovi_setting.input[i].el_halfsize_flag = dv_inst[id].el_halfsize_flag;
+			pr_info("[FEL_DBG] instance %d: el_flag=%d halfsize=%d\n",
+				i, dv_inst[id].el_flag, dv_inst[id].el_halfsize_flag);
 		}
 	}
 	new_m_dovi_setting.dst_format = dst_format;
