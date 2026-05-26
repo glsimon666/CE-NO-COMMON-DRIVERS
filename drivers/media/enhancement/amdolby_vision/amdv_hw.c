@@ -1069,6 +1069,7 @@ static int dv_core1_set(u32 dm_count,
 					 /* vd3 to core1c */
 					 0, 4, 1);
 		} else if (is_aml_s5()) {
+			pr_info("[FEL_DBG] dv_core1_set S5: VD2 to DV core (composer active)\n");
 			VSYNC_WR_DV_REG_BITS
 				(VD2_DV_BYPASS_CTRL,
 				 /* vd2 to dv core */
@@ -1387,14 +1388,18 @@ static int dv_core1_set(u32 dm_count,
 					(AMDV_PATH_SWAP_CTRL2,
 					 0, 2, 2);
 				/*core1a el in sel: vd2 if FEL, else null*/
+				pr_info("[FEL_DBG] T7: el_enable=%d EL sel=%s\n",
+					el_enable, el_enable ? "vd2" : "null");
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
 					 el_enable ? 1 : 3, 4, 2);
-				if (el_enable)
+				if (el_enable) {
+					pr_info("[FEL_DBG] T7: opening VPP_VD2_DSC_CTRL gate\n");
 					VSYNC_WR_DV_REG_BITS
 						(VPP_VD2_DSC_CTRL,
 						/* enable vd2 path to core1a EL */
 						0, 4, 1);
+				}
 				/*core1a out to vd1*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
@@ -1980,14 +1985,18 @@ static int dv_core1a_set(u32 dm_count,
 					(AMDV_PATH_SWAP_CTRL2,
 					 0, 2, 2);
 				/*core1a el in sel: vd2 if FEL, else null*/
+				pr_info("[FEL_DBG] T7: el_enable=%d EL sel=%s\n",
+					el_enable, el_enable ? "vd2" : "null");
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
 					 el_enable ? 1 : 3, 4, 2);
-				if (el_enable)
+				if (el_enable) {
+					pr_info("[FEL_DBG] T7: opening VPP_VD2_DSC_CTRL gate\n");
 					VSYNC_WR_DV_REG_BITS
 						(VPP_VD2_DSC_CTRL,
 						/* enable vd2 path to core1a EL */
 						0, 4, 1);
+				}
 				/*core1a out to vd1*/
 				VSYNC_WR_DV_REG_BITS
 					(AMDV_PATH_SWAP_CTRL2,
@@ -2069,6 +2078,8 @@ static int dv_core1a_set(u32 dm_count,
 				VSYNC_WR_DV_REG_BITS
 					(VD1_S0_DV_BYPASS_CTRL,
 					 1, 0, 1); /* enable core1a */
+				pr_info("[FEL_DBG] S5: copy_core1a_to_core1b=%d composer_enable=%d VD2=enable\n",
+					copy_core1a_to_core1b, composer_enable);
 				if (copy_core1a_to_core1b || composer_enable) {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
