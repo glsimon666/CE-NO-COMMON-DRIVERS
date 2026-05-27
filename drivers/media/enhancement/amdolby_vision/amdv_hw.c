@@ -1069,12 +1069,17 @@ static int dv_core1_set(u32 dm_count,
 					 /* vd3 to core1c */
 					 0, 4, 1);
 		} else if (is_aml_s5()) {
-			pr_info("[FEL_DBG] dv_core1_set S5: VD2 to DV core, VD1(0x2822)=0x%x VD2(0x3888)=0x%x\n",
+			pr_info("[FEL_DBG] dv_core1_set S5: VD1_S0(0x2822)=0x%x VD1_S1(0x2824)=0x%x VD2(0x3888)=0x%x\n",
 				READ_VPP_DV_REG(VD1_S0_DV_BYPASS_CTRL),
+				READ_VPP_DV_REG(VD1_S1_DV_BYPASS_CTRL),
 				READ_VPP_DV_REG(VD2_DV_BYPASS_CTRL));
 			VSYNC_WR_DV_REG_BITS
 				(VD2_DV_BYPASS_CTRL,
 				 /* vd2 to dv core */
+				 1, 0, 1);
+			VSYNC_WR_DV_REG_BITS
+				(VD1_S1_DV_BYPASS_CTRL,
+				 /* vd1_s1 (EL) to dv core */
 				 1, 0, 1);
 		} else {
 			VSYNC_WR_DV_REG_BITS
@@ -2080,14 +2085,18 @@ static int dv_core1a_set(u32 dm_count,
 				VSYNC_WR_DV_REG_BITS
 					(VD1_S0_DV_BYPASS_CTRL,
 					 1, 0, 1); /* enable core1a */
-				pr_info("[FEL_DBG] S5: copy_core1a_to_core1b=%d composer_enable=%d VD1(0x2822)=0x%x VD2(0x3888)=0x%x\n",
+				pr_info("[FEL_DBG] S5: copy=%d composer=%d VD1_S0(0x2822)=0x%x VD1_S1(0x2824)=0x%x VD2(0x3888)=0x%x\n",
 					copy_core1a_to_core1b, composer_enable,
 					READ_VPP_DV_REG(VD1_S0_DV_BYPASS_CTRL),
+					READ_VPP_DV_REG(VD1_S1_DV_BYPASS_CTRL),
 					READ_VPP_DV_REG(VD2_DV_BYPASS_CTRL));
 				if (copy_core1a_to_core1b || composer_enable) {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
 						 1, 0, 1); /* enable core1b / EL path */
+					VSYNC_WR_DV_REG_BITS
+						(VD1_S1_DV_BYPASS_CTRL,
+						 1, 0, 1); /* vd1_s1 (EL) to dv core */
 				} else {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
