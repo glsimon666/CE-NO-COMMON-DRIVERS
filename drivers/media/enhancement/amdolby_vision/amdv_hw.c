@@ -2089,15 +2089,15 @@ static int dv_core1a_set(u32 dm_count,
 				pr_info("[FEL_DBG] S5: copy=%d el_enable=%d VD2(0x3888)=0x%x\n",
 					copy_core1a_to_core1b, el_enable,
 					READ_VPP_DV_REG(VD2_DV_BYPASS_CTRL));
-				if (copy_core1a_to_core1b) {
-					/* core1b el path: vd2 to core1b if FEL, always on for shared mode */
+				if (copy_core1a_to_core1b || el_enable) {
+					/* core1b el path: vd2 to core1b if FEL/EL, always on for shared mode */
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
 						 1, 0, 1); /* enable core1b */
-				} else if (!el_enable) {
+				} else {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
-						 0, 0, 1); /* disable core1b, let dv_core1b_set re-enable if needed */
+						 0, 0, 1); /* disable core1b */
 				}
 			} else {
 				VSYNC_WR_DV_REG_BITS
