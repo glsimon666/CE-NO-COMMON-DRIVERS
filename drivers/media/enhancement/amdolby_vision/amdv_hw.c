@@ -2299,9 +2299,10 @@ static int dv_core1b_set(u32 dm_count,
 				/* vd2 dolby disable, vd2 to core1b */
 				 1, 4, 1);
 		} else if (is_aml_s5()) {
-			VSYNC_WR_DV_REG_BITS
-				(VD2_DV_BYPASS_CTRL,
-				 0, 0, 1); /* bypass core1b */
+			if (!el_enable)
+				VSYNC_WR_DV_REG_BITS
+					(VD2_DV_BYPASS_CTRL,
+					 0, 0, 1); /* bypass core1b */
 		}
 	}
 
@@ -2410,7 +2411,7 @@ static int dv_core1b_set(u32 dm_count,
 			VSYNC_WR_DV_REG_BITS
 				(VPP_VD2_DSC_CTRL,
 				 1, 4, 1);
-		else if (is_aml_s5())
+		else if (is_aml_s5() && !el_enable)
 			VSYNC_WR_DV_REG_BITS
 				(VD2_DV_BYPASS_CTRL,
 				 0, 0, 1);/* core1b bypass*/
