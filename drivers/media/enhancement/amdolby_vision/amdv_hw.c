@@ -1068,6 +1068,10 @@ static int dv_core1_set(u32 dm_count,
 					(VPP_VD3_DSC_CTRL,
 					 /* vd3 to core1c */
 					 0, 4, 1);
+		} else if (is_aml_s5()) {
+			VSYNC_WR_DV_REG_BITS
+				(VD2_DV_BYPASS_CTRL,
+				 1, 0, 1); /* vd2 to core1b */
 		} else {
 			VSYNC_WR_DV_REG_BITS
 				(VIU_MISC_CTRL1,
@@ -1604,6 +1608,18 @@ static int dv_core1a_set(u32 dm_count,
 					VSYNC_RD_DV_REG(AMDV_PATH_CTRL));
 			}
 		}
+	} else if (is_aml_s5() && dv_core1[0].core1_on == 0) {
+		if ((VSYNC_RD_DV_REG(VD1_S0_DV_BYPASS_CTRL) & 0x1) == 0) {
+			pr_dv_dbg("core1a disable for 1st frame.Re-enable core1a\n");
+			VSYNC_WR_DV_REG_BITS(VD1_S0_DV_BYPASS_CTRL, 1, 0, 1);
+		}
+		if (el_enable) {
+			if ((VSYNC_RD_DV_REG(VD2_DV_BYPASS_CTRL) & 0x1) == 0) {
+				pr_dv_dbg("((%s %d enable el))\n",
+					__func__, __LINE__);
+				VSYNC_WR_DV_REG_BITS(VD2_DV_BYPASS_CTRL, 1, 0, 1);
+			}
+		}
 	}
 
 	if (dolby_vision_on &&
@@ -2060,13 +2076,14 @@ static int dv_core1a_set(u32 dm_count,
 					(VD1_S0_DV_BYPASS_CTRL,
 					 1, 0, 1); /* enable core1a */
 				if (copy_core1a_to_core1b) {
+					/* core1b el path: vd2 to core1b if FEL, always on for shared mode */
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
 						 1, 0, 1); /* enable core1b */
-				} else {
+				} else if (!el_enable) {
 					VSYNC_WR_DV_REG_BITS
 						(VD2_DV_BYPASS_CTRL,
-						 0, 0, 1); /* disable core1b */
+						 0, 0, 1); /* disable core1b, let dv_core1b_set re-enable if needed */
 				}
 			} else {
 				VSYNC_WR_DV_REG_BITS
@@ -2382,7 +2399,7 @@ static int dv_core1b_set(u32 dm_count,
 		else if (is_aml_s5())
 			VSYNC_WR_DV_REG_BITS
 				(VD2_DV_BYPASS_CTRL,
-				 1, 0, 1);/* core1b bypass*/
+				 0, 0, 1);/* core1b bypass*/
 	} else {
 		if (dv_core1[1].run_mode_count >
 			amdv_run_mode_delay) {
