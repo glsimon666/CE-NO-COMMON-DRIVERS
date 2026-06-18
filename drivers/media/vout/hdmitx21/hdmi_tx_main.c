@@ -207,6 +207,15 @@ struct vsdb_phyaddr *get_hdmitx21_phy_addr(void)
  * when switch DV(LL)->HLG
  */
 static int hdr_mute_frame = 20;
+
+static bool dovi_tv_led_bt2020;
+module_param(dovi_tv_led_bt2020, bool, 0644);
+MODULE_PARM_DESC(dovi_tv_led_bt2020, "\n dovi_tv_led_bt2020\n");
+
+static bool dovi_tv_led_no_colorimetry;
+module_param(dovi_tv_led_no_colorimetry, bool, 0644);
+MODULE_PARM_DESC(dovi_tv_led_no_colorimetry, "\n dovi_tv_led_no_colorimetry\n");
+
 static struct vout_device_s hdmitx_vdev = {
 	.fresh_tx_hdr_pkt = hdmitx_set_drm_pkt,
 	.fresh_tx_sbtm_pkt = hdmitx_set_sbtm_pkt,

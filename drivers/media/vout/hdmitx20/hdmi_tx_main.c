@@ -163,6 +163,14 @@ static struct hdmitx_dev *tx20_dev;
  */
 static int hdr_mute_frame = 20;
 
+static bool dovi_tv_led_bt2020;
+module_param(dovi_tv_led_bt2020, bool, 0644);
+MODULE_PARM_DESC(dovi_tv_led_bt2020, "\n dovi_tv_led_bt2020\n");
+
+static bool dovi_tv_led_no_colorimetry;
+module_param(dovi_tv_led_no_colorimetry, bool, 0644);
+MODULE_PARM_DESC(dovi_tv_led_no_colorimetry, "\n dovi_tv_led_no_colorimetry\n");
+
 struct vout_device_s hdmitx_vdev = {
 	.fresh_tx_hdr_pkt = hdmitx_set_drm_pkt,
 	.fresh_tx_vsif_pkt = hdmitx_set_vsif_pkt,

@@ -792,6 +792,10 @@ static uint hdr2_debug;
 module_param(hdr2_debug, uint, 0664);
 MODULE_PARM_DESC(hdr2_debug, "\n hdr2_debug\n");
 
+static bool osd_pq_bypass;
+module_param(osd_pq_bypass, bool, 0664);
+MODULE_PARM_DESC(osd_pq_bypass, "\n osd_pq_bypass\n");
+
 static uint clip_func = 0xff;
 module_param(clip_func, uint, 0664);
 MODULE_PARM_DESC(clip_func, "\n clip_func_debug\n");
@@ -3258,7 +3262,8 @@ enum hdr_process_sel hdr_func(enum hdr_module_sel module_sel,
 		   hdr_process_select & HLG_BYPASS ||
 		   hdr_process_select & CUVA_BYPASS ||
 		   hdr_process_select & CUVAHLG_HLG ||
-		   hdr_process_select & CUVAHLG_CUVA) {
+		   hdr_process_select & CUVAHLG_CUVA ||
+		   (module_sel == OSD1_HDR && osd_pq_bypass)) {
 		for (i = 0; i < HDR2_OETF_LUT_SIZE; i++) {
 			hdr_lut_param.oetf_lut[i] = oe_y_lut_bypass[i];
 			hdr_lut_param.ogain_lut[i] = oo_y_lut_bypass[i];
@@ -5503,8 +5508,8 @@ static int create_hdr_full_setting(enum hdr_module_sel module_sel,
 	if ((module_sel == OSD1_HDR || module_sel == OSD2_HDR ||
 		module_sel == OSD3_HDR) &&
 	    cpu_after_eq(MESON_CPU_MAJOR_ID_G12A)) {
-		if (!is_amdv_on())
-			hdr_process_select |= RGB_OSD;
+			if (!is_amdv_on() || osd_pq_bypass)
+				hdr_process_select |= RGB_OSD;
 
 		/*for g12a/g12b osd blend shift rtl bug*/
 		if (is_meson_g12a_cpu() ||

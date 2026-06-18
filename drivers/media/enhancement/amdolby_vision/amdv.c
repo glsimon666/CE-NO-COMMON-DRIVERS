@@ -275,6 +275,54 @@ bool dolby_vision_use_source_meta_levels = true;
 module_param(dolby_vision_use_source_meta_levels, bool, 0664);
 MODULE_PARM_DESC(dolby_vision_use_source_meta_levels, "\n dolby_vision_use_source_meta_levels\n");
 
+static unsigned int dolby_vision_dolby_vsvdb_inject;
+module_param(dolby_vision_dolby_vsvdb_inject, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_dolby_vsvdb_inject, "\n dolby_vision_dolby_vsvdb_inject\n");
+
+static char *dolby_vision_dolby_vsvdb_payload = "";
+module_param(dolby_vision_dolby_vsvdb_payload, charp, 0664);
+MODULE_PARM_DESC(dolby_vision_dolby_vsvdb_payload, "\n dolby_vision_dolby_vsvdb_payload\n");
+
+static unsigned int dolby_vision_dolby_vsvdb_source_lum_limit;
+module_param(dolby_vision_dolby_vsvdb_source_lum_limit, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_dolby_vsvdb_source_lum_limit, "\n dolby_vision_dolby_vsvdb_source_lum_limit\n");
+
+static int dolby_vision_dolby_vsvdb_brightness_lvl_pq20;
+module_param(dolby_vision_dolby_vsvdb_brightness_lvl_pq20, int, 0664);
+MODULE_PARM_DESC(dolby_vision_dolby_vsvdb_brightness_lvl_pq20, "\n dolby_vision_dolby_vsvdb_brightness_lvl_pq20\n");
+
+static bool dolby_vision_hdr_for_dv_ll;
+module_param(dolby_vision_hdr_for_dv_ll, bool, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr_for_dv_ll, "\n dolby_vision_hdr_for_dv_ll\n");
+
+static unsigned int dolby_vision_hdr_inject;
+module_param(dolby_vision_hdr_inject, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr_inject, "\n dolby_vision_hdr_inject\n");
+
+static char *dolby_vision_hdr_payload = "";
+module_param(dolby_vision_hdr_payload, charp, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr_payload, "\n dolby_vision_hdr_payload\n");
+
+static unsigned int dolby_vision_keep_source_meta_level_5;
+module_param(dolby_vision_keep_source_meta_level_5, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_keep_source_meta_level_5, "\n dolby_vision_keep_source_meta_level_5\n");
+
+static unsigned int dolby_vision_keep_source_meta_level_6;
+module_param(dolby_vision_keep_source_meta_level_6, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_keep_source_meta_level_6, "\n dolby_vision_keep_source_meta_level_6\n");
+
+static unsigned int dolby_vision_subtitles;
+module_param(dolby_vision_subtitles, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_subtitles, "\n dolby_vision_subtitles\n");
+
+static unsigned int dolby_vision_xbmc_osd;
+module_param(dolby_vision_xbmc_osd, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_xbmc_osd, "\n dolby_vision_xbmc_osd\n");
+
+static bool dolby_vision_hdr10_graphics;
+module_param(dolby_vision_hdr10_graphics, bool, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr10_graphics, "\n dolby_vision_hdr10_graphics\n");
+
 #define DV_NAME_LEN_MAX 32
 
 #define TV_DMA_TBL_SIZE 3754

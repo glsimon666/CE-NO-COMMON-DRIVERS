@@ -66,6 +66,8 @@ static unsigned int vs_meas_en;
 static bool disable_modesysfs;
 static bool enable_debugmode;
 
+static char vout_axis[64] __nosavedata;
+
 int vout_debug_print;
 
 /* **********************************************************
@@ -401,6 +403,85 @@ static int set_vout_init_mode(void)
 /* ************************************************************* */
 /* vout sysfs                                                    */
 /* ************************************************************* */
+static int parse_para(const char *para, int para_num, int *result)
+{
+	char *token = NULL;
+	char *params, *params_base;
+	int *out = result;
+	int len = 0, count = 0;
+	int res = 0;
+	int ret = 0;
+
+	if (!para)
+		return 0;
+
+	params = kstrdup(para, GFP_KERNEL);
+	params_base = params;
+	token = params;
+	len = strlen(token);
+	do {
+		token = strsep(&params, " ");
+		while (token && (isspace(*token)
+				|| !isgraph(*token)) && len) {
+			token++;
+			len--;
+		}
+		if ((!token) || (*token == '\n') || (len == 0))
+			break;
+		ret = kstrtoint(token, 0, &res);
+		if (ret < 0)
+			break;
+		len = strlen(token);
+		*out++ = res;
+		count++;
+	} while ((token) && (count < para_num) && (len > 0));
+
+	kfree(params_base);
+	return count;
+}
+
+#define OSD_COUNT 2
+static void set_vout_axis(char *para)
+{
+	static struct disp_rect_s disp_rect[OSD_COUNT];
+	int *pt;
+	int parsed[MAX_NUMBER_PARA] = {};
+
+	if (parse_para(para, 8, parsed) >= 4) {
+		pt = &disp_rect[0].x;
+		memcpy(pt, &parsed[0], sizeof(struct disp_rect_s));
+		pt = &disp_rect[1].x;
+		memcpy(pt, &parsed[4], sizeof(struct disp_rect_s));
+	}
+
+	VOUTPR("osd0=> x:%d,y:%d,w:%d,h:%d\n"
+		"osd1=> x:%d,y:%d,w:%d,h:%d\n",
+			disp_rect[0].x, disp_rect[0].y,
+			disp_rect[0].w, disp_rect[0].h,
+			disp_rect[1].x, disp_rect[1].y,
+			disp_rect[1].w, disp_rect[1].h);
+	vout_notifier_call_chain(VOUT_EVENT_OSD_DISP_AXIS, &disp_rect[0]);
+}
+
+static ssize_t vout_axis_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	int ret = 0;
+
+	ret = snprintf(buf, 64, "%s\n", vout_axis);
+	return ret;
+}
+
+static ssize_t vout_axis_store(struct class *class,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	mutex_lock(&vout_serve_mutex);
+	snprintf(vout_axis, 64, "%s", buf);
+	set_vout_axis(vout_axis);
+	mutex_unlock(&vout_serve_mutex);
+	return count;
+}
+
 static ssize_t vout_mode_show(struct class *class,
 			      struct class_attribute *attr, char *buf)
 {
@@ -779,6 +860,7 @@ static ssize_t vout_debug_print_store(struct class *class,
 
 static struct class_attribute vout_class_attrs[] = {
 	__ATTR(mode,       0644, vout_mode_show, vout_mode_store),
+	__ATTR(axis,       0644, vout_axis_show, vout_axis_store),
 	__ATTR(fr_policy,  0644, vout_fr_policy_show, vout_fr_policy_store),
 	__ATTR(fr_hint,    0644, vout_fr_hint_show, vout_fr_hint_store),
 	__ATTR(fr_range,   0644, vout_fr_range_show, NULL),
