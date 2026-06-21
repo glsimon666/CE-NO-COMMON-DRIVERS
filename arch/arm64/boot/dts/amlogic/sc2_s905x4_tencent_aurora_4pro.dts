@@ -1,0 +1,32 @@
+#include "sc2_s905x4_ah212_drm.dts"
+#include "coreelec_sc2_common.dtsi"
+
+/ {
+	model = "Tencent Aurora Box 4Pro";
+	coreelec-dt-id = "sc2_s905x4_tencent_aurora_4pro";
+
+	gpioleds {
+		sys_led {
+			gpios = <&gpio GPIOD_11 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	auge_sound {
+		/delete-property/ avout_mute-gpios;
+	};
+
+	gpio_keypad {
+		status = "disabled";
+	};
+};
+
+&i2c2 {
+	status = "disabled";
+};
+
+&amhdmitx {
+	vend_data {
+		vendor_name = "Tencent";
+		product_desc = "Aurora Box 4Pro";
+	};
+};

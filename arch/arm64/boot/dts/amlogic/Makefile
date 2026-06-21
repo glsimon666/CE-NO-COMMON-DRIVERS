@@ -86,6 +86,7 @@ dtb-y += sc2_s905x4_2g.dtb
 dtb-y += sc2_s905x4_2g_1gbit.dtb
 dtb-y += sc2_s905x4_4g.dtb
 dtb-y += sc2_s905x4_4g_1gbit.dtb
+dtb-y += sc2_s905x4_tencent_aurora_4pro.dtb
 dtb-y += sc2_s905x4_buzztv_u5_4g_1gbit.dtb
 dtb-y += sc2_s905x4_buzztv_x5_2g.dtb
 dtb-y += sc2_s905x4_buzztv_x5_2g_1gbit.dtb
